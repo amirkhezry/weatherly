@@ -1,5 +1,5 @@
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 import HourlyForecast from "./components/HourlyForecast";
@@ -9,6 +9,27 @@ import {
   getWeatherForecast,
   getCityCurrentWeather,
 } from "./services/weather";
+
+// Safely read preferences from localStorage.
+function readPreference(key, fallback) {
+  try {
+    if (typeof window === "undefined") return fallback;
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// Safely save preferences to localStorage.
+function writePreference(key, value) {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(key, value);
+    }
+  } catch {
+    // The app remains usable if browser storage is unavailable.
+  }
+}
 
 // City recommendations grouped by country code.
 const COUNTRY_CITIES = {
@@ -204,7 +225,6 @@ async function getCitiesFromSameCountry(selectedPlace) {
     (name) => normalizeName(name) !== selectedName
   );
 
-  // Resolve candidate names in parallel.
   const coordinateResults = await Promise.allSettled(
     searchNames.map((name) => getCityCoordinates(name))
   );
@@ -217,7 +237,6 @@ async function getCitiesFromSameCountry(selectedPlace) {
 
     const place = result.value;
 
-    // Never show a recommendation from a different country.
     if (place.country_code?.toUpperCase() !== countryCode) continue;
 
     const normalized = normalizeName(place.name);
@@ -228,7 +247,6 @@ async function getCitiesFromSameCountry(selectedPlace) {
     matchedPlaces.push(place);
   }
 
-  // Fetch the current weather for up to four matching cities.
   const placesToShow = matchedPlaces.slice(0, 4);
 
   const weatherResults = await Promise.allSettled(
@@ -255,17 +273,41 @@ async function getCitiesFromSameCountry(selectedPlace) {
 }
 
 function App() {
-  const [city, setCity] = useState("");
+  // Restore the last successfully searched city from localStorage.
+  const [city, setCity] = useState(() =>
+    readPreference("weatherly:lastCity", "")
+  );
+
   const [cityData, setCityData] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [otherCities, setOtherCities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
   const [error, setError] = useState("");
-  const [language, setLanguage] = useState("fa");
-  const [themeOverride, setThemeOverride] = useState(null);
 
-  // Prevent old search results from replacing newer ones.
+  // Restore the previous language.
+  const [language, setLanguage] = useState(() => {
+    const savedLanguage = readPreference(
+      "weatherly:language",
+      "fa"
+    );
+
+    return savedLanguage === "en" ? "en" : "fa";
+  });
+
+  // null = automatic, true = night, false = day.
+  const [themeOverride, setThemeOverride] = useState(() => {
+    const savedTheme = readPreference(
+      "weatherly:theme",
+      "auto"
+    );
+
+    if (savedTheme === "night") return true;
+    if (savedTheme === "day") return false;
+
+    return null;
+  });
+
   const requestNumber = useRef(0);
 
   const t = TEXT[language];
@@ -300,9 +342,11 @@ function App() {
     const query = String(cityOverride ?? "").trim();
 
     if (!query) {
-      setError(language === "fa"
-        ? "لطفاً نام شهر را وارد کنید."
-        : "Please enter a city name.");
+      setError(
+        language === "fa"
+          ? "لطفاً نام شهر را وارد کنید."
+          : "Please enter a city name."
+      );
       return;
     }
 
@@ -314,20 +358,25 @@ function App() {
     setLoadingCities(false);
 
     try {
-      const place = placeOverride || await getCityCoordinates(query);
+      const place =
+        placeOverride || await getCityCoordinates(query);
 
       const data = await getWeatherForecast(
         place.latitude,
         place.longitude
       );
 
+      // Ignore results from an older search.
       if (thisRequest !== requestNumber.current) return;
 
       setCityData(place);
       setForecast(data);
       setCity(place.name);
 
-      // After the main weather loads, independently fetch same-country cities.
+      // Save the city only after a successful weather request.
+      writePreference("weatherly:lastCity", place.name);
+
+      // Fetch recommendations from the same country.
       setLoadingCities(true);
 
       getCitiesFromSameCountry(place)
@@ -354,11 +403,7 @@ function App() {
 
         const notFound = err.message?.includes("پیدا نشد");
 
-        setError(
-          notFound
-            ? t.notFound
-            : t.error
-        );
+        setError(notFound ? t.notFound : t.error);
       }
     } finally {
       if (thisRequest === requestNumber.current) {
@@ -366,6 +411,37 @@ function App() {
       }
     }
   }
+
+  // Restore the previous city once when the app starts.
+  useEffect(() => {
+    const savedCity = readPreference(
+      "weatherly:lastCity",
+      ""
+    );
+
+    if (savedCity.trim()) {
+      searchCity(null, savedCity);
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist language changes.
+  useEffect(() => {
+    writePreference("weatherly:language", language);
+  }, [language]);
+
+  // Persist theme selection, including automatic mode.
+  useEffect(() => {
+    const savedTheme =
+      themeOverride === null
+        ? "auto"
+        : themeOverride
+          ? "night"
+          : "day";
+
+    writePreference("weatherly:theme", savedTheme);
+  }, [themeOverride]);
 
   let firstHourIndex = 0;
 
@@ -556,10 +632,14 @@ function App() {
             <div className="current-weather-heading">
               <div>
                 <p className="eyebrow">{t.location}</p>
+
                 <h1>
                   {cityData.name}
-                  {cityData.country ? `, ${cityData.country}` : ""}
+                  {cityData.country
+                    ? `, ${cityData.country}`
+                    : ""}
                 </h1>
+
                 <p className="current-local-time">
                   {t.localTime}: {current.time?.slice(11, 16)}
                 </p>
@@ -567,7 +647,9 @@ function App() {
 
               <span
                 className={`current-day-night ${
-                  Number(current.is_day) === 1 ? "is-day" : "is-night"
+                  Number(current.is_day) === 1
+                    ? "is-day"
+                    : "is-night"
                 }`}
               >
                 {Number(current.is_day) === 1
@@ -587,15 +669,15 @@ function App() {
                 </strong>
 
                 <span className="temperature-unit">C</span>
-
                 <span className="degree-symbol">°</span>
               </div>
 
-
               <div className="current-weather-description">
                 <h2>{currentInfo.label}</h2>
+
                 <p>
-                  {t.feels}: {Math.round(current.apparent_temperature)}°C
+                  {t.feels}:{" "}
+                  {Math.round(current.apparent_temperature)}°C
                 </p>
               </div>
             </div>
@@ -610,7 +692,9 @@ function App() {
               <div className="current-detail-item">
                 <span>💨</span>
                 <small>{t.wind}</small>
-                <strong>{Math.round(current.wind_speed_10m)} km/h</strong>
+                <strong>
+                  {Math.round(current.wind_speed_10m)} km/h
+                </strong>
               </div>
 
               <div className="current-detail-item">
@@ -621,7 +705,6 @@ function App() {
             </div>
           </section>
         )}
-
 
         {cityData && current && !loading ? (
           <>
@@ -706,7 +789,10 @@ function App() {
                           <div
                             className="rain-bar"
                             style={{
-                              height: `${Math.max(item.probability, 3)}%`,
+                              height: `${Math.max(
+                                item.probability,
+                                3
+                              )}%`,
                             }}
                           />
                         </div>
@@ -796,7 +882,9 @@ function App() {
                         role="button"
                         tabIndex={0}
                         aria-label={`Show weather for ${item.name}`}
-                        onClick={() => handleCityCardClick(item)}
+                        onClick={() =>
+                          handleCityCardClick(item)
+                        }
                         onKeyDown={(event) => {
                           if (
                             event.key === "Enter" ||
@@ -821,7 +909,9 @@ function App() {
                               cityIsDay ? "is-day" : "is-night"
                             }`}
                           >
-                            {cityIsDay ? "☀ " + t.day : "☾ " + t.night}
+                            {cityIsDay
+                              ? "☀ " + t.day
+                              : "☾ " + t.night}
                           </span>
                         </div>
 
@@ -835,7 +925,9 @@ function App() {
                           </span>
 
                           <strong>
-                            {Math.round(item.weather.temperature_2m)}°
+                            {Math.round(
+                              item.weather.temperature_2m
+                            )}°
                           </strong>
                         </div>
                       </article>
@@ -843,11 +935,15 @@ function App() {
                   })}
 
                   {loadingCities && (
-                    <p className="empty-cities">{t.loadingCities}</p>
+                    <p className="empty-cities">
+                      {t.loadingCities}
+                    </p>
                   )}
 
                   {!loadingCities && otherCities.length === 0 && (
-                    <p className="empty-cities">{t.noCities}</p>
+                    <p className="empty-cities">
+                      {t.noCities}
+                    </p>
                   )}
                 </div>
               </section>
@@ -860,18 +956,20 @@ function App() {
             <p>{t.welcomeText}</p>
 
             <div className="popular-cities">
-              {["Baku", "Tehran", "Berlin", "Tokyo"].map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => {
-                    setCity(name);
-                    searchCity(null, name);
-                  }}
-                >
-                  {name} ↗
-                </button>
-              ))}
+              {["Baku", "Tehran", "Berlin", "Tokyo"].map(
+                (name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      setCity(name);
+                      searchCity(null, name);
+                    }}
+                  >
+                    {name} ↗
+                  </button>
+                )
+              )}
             </div>
           </section>
         ) : null}
