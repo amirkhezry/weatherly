@@ -1,16 +1,46 @@
-# React + Vite
+# Weatherly
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A responsive weather application built with React and Vite, featuring real-time weather data, hourly forecasts, a 7-day forecast, and a bilingual interface.
 
-Currently, two official plugins are available:
+**Live Demo:** [Open Weatherly](https://amirkhezry.github.io/weatherly/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## React Compiler
+- Search for cities and view their weather information.
+- Display current weather conditions and temperature.
+- Explore hourly weather forecasts.
+- View a 7-day weather forecast.
+- Visualize precipitation probability.
+- Switch between Persian and English.
+- Choose Day, Night, or Auto theme modes.
+- Explore recommended cities and select a city to view its weather.
+- Responsive layout for desktop and mobile screens.
+- Save the most recently selected city, language, and theme using localStorage.
+- Fetch weather data without requiring an API key.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- React
+- JavaScript
+- Vite
+- CSS
+- Open-Meteo Geocoding API
+- Open-Meteo Forecast API
+- Browser localStorage
+- Git and GitHub
+- GitHub Pages
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Getting Started
+
+### Prerequisites
+
+- Node.js
+- npm
+- Git
+
+### Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/amirkhezry/weatherly.git
