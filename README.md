@@ -3,6 +3,7 @@
 A responsive weather application built with React and Vite, featuring real-time weather data, hourly forecasts, a 7-day forecast, and a bilingual interface.
 
 **Live Demo:** [Open Weatherly](https://amirkhezry.github.io/weatherly/)
+![Weatherly Preview](screenshots/weatherly-preview.png)
 
 ## Features
 
